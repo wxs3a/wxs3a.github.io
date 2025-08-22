@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>分布式加密聊天 Demo</title>
     <style>
 * {
     margin: 0;
@@ -296,10 +295,10 @@ header h1 {
 <body>
     <div class="container">
         <header>
-            <h1>🔐 分布式加密聊天</h1>
+            <h1>Demo</h1>
             <div class="status">
                 <span id="status">离线</span>
-                <span id="peer-count">节点: 0</span>
+                <span id="peer-count">已连接的节点: 0</span>
             </div>
         </header>
 
@@ -422,9 +421,9 @@ class DistributedChat {
         const userData = await this.getFromDB('users', 'current');
         
         if (!userData) {
-            const userId = prompt('请输入您的用户名（将自动添加安全前缀）:');
+            const userId = prompt('请输入名称:（任意长度的英文字符，会添加前缀和后缀）');
             if (!userId) {
-                alert('必须输入用户名才能使用聊天功能');
+                alert('必须输入名称才能使用聊天功能');
                 location.reload();
                 return;
             }
@@ -1213,7 +1212,7 @@ class DistributedChat {
     }
 
     updatePeerCount() {
-        document.getElementById('peer-count').textContent = `节点: ${this.connections.size}`;
+        document.getElementById('peer-count').textContent = `已连接的节点: ${this.connections.size}`;
     }
 
     enableChat() {
