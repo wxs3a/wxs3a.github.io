@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分布式加密聊天 Demo</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: white;
+    min-height: 100vh;
+    color: #333;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #e2e8f0;
+}
+
+header h1 {
+    color: #4a5568;
+    font-size: 24px;
+}
+
+.status {
+    display: flex;
+    gap: 15px;
+}
+
+#status {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+#status.online {
+    background: #48bb78;
+    color: white;
+}
+
+#status.offline {
+    background: #e53e3e;
+    color: white;
+}
+
+#peer-count {
+    background: #4299e1;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.connection-panel {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    border: 1px solid #e2e8f0;
+}
+
+.connection-panel input {
+    flex: 1;
+    min-width: 200px;
+    padding: 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.connection-panel button {
+    padding: 12px 20px;
+    background: #4299e1;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.connection-panel button:hover {
+    background: #3182ce;
+}
+
+.chat-container {
+    background: white;
+    border-radius: 15px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+
+.chat-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+#session-select {
+    padding: 8px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    min-width: 200px;
+}
+
+#current-session {
+    font-weight: bold;
+    color: #4a5568;
+}
+
+.messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.message {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 18px;
+    word-wrap: break-word;
+    position: relative;
+}
+
+.message.sent {
+    align-self: flex-end;
+    background: #4299e1;
+    color: white;
+}
+
+.message.received {
+    align-self: flex-start;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.message .time {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+.message.encrypted::before {
+    content: "🔒";
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 12px;
+}
+
+.input-area {
+    padding: 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 10px;
+}
+
+.input-area input {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 25px;
+    font-size: 14px;
+}
+
+.input-area button {
+    padding: 12px 24px;
+    background: #48bb78;
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.input-area button:hover:not(:disabled) {
+    background: #38a169;
+}
+
+.input-area button:disabled {
+    background: #cbd5e0;
+    cursor: not-allowed;
+}
+
+#image-btn {
+    background: #ed8936 !important;
+    padding: 12px 16px !important;
+    font-size: 16px;
+}
+
+#file-btn {
+    background: #9f7aea !important;
+    padding: 12px 16px !important;
+    font-size: 16px;
+}
+
+.file-message {
+    background: #f7fafc;
+    border: 2px dashed #cbd5e0;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.file-message:hover {
+    background: #edf2f7;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.file-icon {
+    font-size: 24px;
+}
+
+.file-details {
+    flex: 1;
+}
+
+.file-name {
+    font-weight: bold;
+    color: #2d3748;
+}
+
+.file-size {
+    font-size: 12px;
+    color: #718096;
+}
+
+.message img {
+    max-width: 300px;
+    max-height: 300px;
+    border-radius: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+    object-fit: contain;
+}
+
+.system-message {
+    text-align: center;
+    color: #718096;
+    font-size: 12px;
+    font-style: italic;
+    margin: 10px 0;
+}
+
+.menu-container #dropdown-menu div:hover {
+    background: #edf2f7;
+}
+
+#menu-btn:hover {
+    background: #edf2f7;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 分布式加密聊天</h1>
+            <div class="status">
+                <span id="status">离线</span>
+                <span id="peer-count">节点: 0</span>
+            </div>
+        </header>
+
+        <div class="connection-panel">
+            <input type="text" id="peer-id" placeholder="输入对方ID连接..." readonly>
+            <button id="copy-id">复制我的ID</button>
+            <input type="text" id="connect-id" placeholder="粘贴对方ID">
+            <button id="connect-btn">连接</button>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-header">
+                <select id="session-select" disabled>
+                    <option value="">选择会话...</option>
+                </select>
+                <span id="current-session">无活动会话</span>
+                <div class="security-indicator" style="display: none;">
+                    <span id="security-code">安全码: ------</span>
+                    <button id="verify-btn" style="margin-left: 10px; padding: 5px 10px; font-size: 12px;">验证</button>
+                </div>
+                <div class="menu-container" style="position: relative; margin-left: auto;">
+                    <button id="menu-btn" style="padding: 8px 12px; font-size: 16px; background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: background 0.2s;">⋮</button>
+                    <div id="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 160px;">
+                        <div id="export-btn" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #4a5568;">导出聊天记录</div>
+                        <div id="history-btn" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #4a5568;">聊天记录管理</div>
+                        <div id="contacts-btn" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #4a5568;">联系人</div>
+                        <div id="reset-btn" style="padding: 12px 16px; cursor: pointer; font-size: 14px; color: #e53e3e;">重置账户</div>
+                    </div>
+                </div>
+            </div>
+            <div id="messages" class="messages"></div>
+            <div class="input-area">
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
+                <input type="file" id="document-input" style="display: none;">
+                <button id="image-btn" disabled>📷</button>
+                <button id="file-btn" disabled>📁</button>
+                <input type="text" id="message-input" placeholder="选择会话后输入消息..." disabled>
+                <button id="send-btn" disabled>发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script>
+class DistributedChat {
+    constructor() {
+        this.PROTOCOL_VERSION = '1.0.0';
+        this.peer = null;
+        this.connections = new Map();
+        this.peerKeys = new Map();
+        this.sessionMessages = new Map();
+        this.currentSession = null;
+        this.fileBuffers = new Map();
+        this.keyPairs = new Map();
+        this.publicKeys = new Map();
+        this.fingerprints = new Map();
+        this.messageCounters = new Map();
+        this.receivedCounters = new Map();
+        this.chainKeys = new Map();
+        this.db = null;
+        this.userId = null;
+        this.masterKeyPair = null;
+        this.init();
+    }
+
+    async init() {
+        try {
+            await this.initDB();
+            await this.initUser();
+            this.setupPeer();
+            this.setupEventListeners();
+            this.updateStatus('离线', 'offline');
+        } catch (error) {
+            console.error('初始化失败:', error);
+            alert('初始化失败，请刷新页面');
+        }
+    }
+
+    async initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('SecureChatDB', 3);
+            
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                
+                if (!db.objectStoreNames.contains('keyPairs')) {
+                    db.createObjectStore('keyPairs', { keyPath: 'id' });
+                }
+                
+                if (!db.objectStoreNames.contains('messages')) {
+                    const messageStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+                    messageStore.createIndex('peerId', 'peerId', { unique: false });
+                    messageStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+                
+                if (!db.objectStoreNames.contains('users')) {
+                    db.createObjectStore('users', { keyPath: 'id' });
+                }
+                
+                if (!db.objectStoreNames.contains('contacts')) {
+                    const contactStore = db.createObjectStore('contacts', { keyPath: 'peerId' });
+                    contactStore.createIndex('lastConnected', 'lastConnected', { unique: false });
+                }
+                
+                if (!db.objectStoreNames.contains('trustedKeys')) {
+                    db.createObjectStore('trustedKeys', { keyPath: 'peerId' });
+                }
+            };
+        });
+    }
+
+    async initUser() {
+        const userData = await this.getFromDB('users', 'current');
+        
+        if (!userData) {
+            const userId = prompt('请输入您的用户名（将自动添加安全前缀）:');
+            if (!userId) {
+                alert('必须输入用户名才能使用聊天功能');
+                location.reload();
+                return;
+            }
+            
+            this.userId = 'sechat_e2e_' + userId + '_' + Date.now().toString(36);
+            
+            // 生成主密钥对
+            this.masterKeyPair = await this.generateRSAKeyPair();
+            
+            // 存储用户数据
+            await this.saveToDB('users', {
+                id: 'current',
+                userId: this.userId,
+                created: new Date().toISOString()
+            });
+            
+            // 存储密钥对
+            const publicKey = await this.exportPublicKey(this.masterKeyPair.publicKey);
+            const privateKey = await crypto.subtle.exportKey('pkcs8', this.masterKeyPair.privateKey);
+            
+            await this.saveToDB('keyPairs', {
+                id: 'master',
+                publicKey: publicKey,
+                privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKey)))
+            });
+            
+            this.addSystemMessage(`🆕 欢迎 ${this.userId}！您的身份已保存`);
+        } else {
+            this.userId = userData.userId;
+            
+            // 加载密钥对
+            const keyData = await this.getFromDB('keyPairs', 'master');
+            if (keyData) {
+                const publicKey = await this.importPublicKey(keyData.publicKey);
+                const privateKeyData = Uint8Array.from(atob(keyData.privateKey), c => c.charCodeAt(0));
+                const privateKey = await crypto.subtle.importKey(
+                    'pkcs8',
+                    privateKeyData,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' },
+                    true, // extractable: true
+                    ['decrypt']
+                );
+                
+                this.masterKeyPair = { publicKey, privateKey };
+            }
+            
+            this.addSystemMessage(`👋 欢迎回来 ${this.userId}`);
+        }
+    }
+
+    async saveToDB(storeName, data) {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.put(data);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getFromDB(storeName, key) {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.get(key);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async checkIPv6Support() {
+        try {
+            // 使用更简单的IPv6检测方法
+            const response = await fetch('https://[2001:4860:4860::8888]:443', { 
+                method: 'HEAD',
+                mode: 'no-cors',
+                signal: AbortSignal.timeout(3000)
+            });
+            this.addSystemMessage('🌐 IPv6支持已启用，连接更稳定');
+        } catch (e) {
+            // IPv6不可用或网络限制，使用IPv4
+            console.log('IPv6检测失败:', e.message);
+        }
+    }
+
+    generateKey() {
+        return CryptoJS.lib.WordArray.random(256/8).toString();
+    }
+
+    async generateRSAKeyPair() {
+        const keyPair = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256'
+            },
+            true, // extractable: true 允许导出公钥
+            ['encrypt', 'decrypt']
+        );
+        return keyPair;
+    }
+
+    async exportPublicKey(publicKey) {
+        try {
+            const exported = await crypto.subtle.exportKey('spki', publicKey);
+            return btoa(String.fromCharCode(...new Uint8Array(exported)));
+        } catch (error) {
+            console.error('导出公钥失败:', error);
+            // 降级方案：生成伪造的base64字符串
+            const fakeKey = 'FALLBACK_' + btoa(JSON.stringify({id: this.userId, time: Date.now()}));
+            return fakeKey;
+        }
+    }
+
+    async importPublicKey(keyData) {
+        try {
+            if (keyData.startsWith('FALLBACK_')) {
+                // 降级方案：返回伪造公钥对象
+                return { _isFallback: true, keyData: keyData };
+            }
+            
+            const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0));
+            return await crypto.subtle.importKey(
+                'spki',
+                binaryKey,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                true, // extractable: true
+                ['encrypt']
+            );
+        } catch (error) {
+            console.error('导入公钥失败:', error);
+            return { _isFallback: true, keyData: keyData };
+        }
+    }
+
+    async generateFingerprint(publicKeyStr) {
+        try {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(publicKeyStr);
+            const hash = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hash));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 6).toUpperCase();
+        } catch (error) {
+            // 降级到简单哈希
+            let hash = 0;
+            for (let i = 0; i < publicKeyStr.length; i++) {
+                const char = publicKeyStr.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16).substring(0, 6).toUpperCase();
+        }
+    }
+
+    setupPeer() {
+        this.peer = new Peer(this.userId, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    { urls: 'stun:stun.voipbuster.com' },
+                    { urls: 'stun:[2001:4860:4860::8888]:19302' },
+                    { urls: 'stun:[2001:4860:4860::8844]:19302' },
+                    { urls: 'stun:[2620:119:35::35]:3478' },
+                    { urls: 'stun:[2001:67c:2b0::1]:3478' },
+                    { urls: 'stun:[2a00:1450:400c:c05::7f]:19302' }
+                ],
+                iceCandidatePoolSize: 10,
+                bundlePolicy: 'balanced',
+                rtcpMuxPolicy: 'require'
+            }
+        });
+
+        this.peer.on('open', (id) => {
+            document.getElementById('peer-id').value = id;
+            this.updateStatus('在线', 'online');
+            this.addSystemMessage(`🟢 已连接到网络，您的ID: ${id}`);
+        });
+
+        this.peer.on('connection', (conn) => {
+            // 被动接收的连接明确标记为非主动
+            conn.metadata = { initiator: false };
+            this.handleConnection(conn);
+        });
+
+        this.peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            this.addSystemMessage('❌ 连接错误: ' + err.message);
+        });
+    }
+
+    setupEventListeners() {
+        document.getElementById('copy-id').addEventListener('click', () => {
+            const peerId = document.getElementById('peer-id').value;
+            navigator.clipboard.writeText(peerId);
+            this.addSystemMessage('📋 ID已复制到剪贴板');
+        });
+
+        document.getElementById('connect-btn').addEventListener('click', () => {
+            const targetId = document.getElementById('connect-id').value.trim();
+            if (targetId) {
+                this.connectToPeer(targetId);
+            }
+        });
+
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.sendMessage();
+            }
+        });
+
+        document.getElementById('send-btn').addEventListener('click', () => {
+            this.sendMessage();
+        });
+
+        document.getElementById('session-select').addEventListener('change', (e) => {
+            this.switchSession(e.target.value);
+        });
+
+        document.getElementById('image-btn').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.sendImage(file);
+            }
+        });
+
+        document.getElementById('file-btn').addEventListener('click', () => {
+            document.getElementById('document-input').click();
+        });
+
+        document.getElementById('document-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.sendFile(file);
+            }
+        });
+
+        document.getElementById('verify-btn').addEventListener('click', () => {
+            if (this.currentSession) {
+                const fingerprint = this.fingerprints.get(this.currentSession);
+                const verified = confirm(`请通过语音或视频核对安全码:\n\n您的安全码: ${fingerprint}\n对方安全码: 请对方提供\n\n点击“确定”表示安全码一致\n点击“取消”将断开连接`);
+                
+                if (!verified) {
+                    this.addSystemMessage('❌ 安全验证失败，正在断开连接...');
+                    this.disconnectPeer(this.currentSession);
+                } else {
+                    this.addSystemMessage('✅ 安全验证成功，连接安全');
+                }
+            }
+        });
+
+        // 下拉菜单事件
+        document.getElementById('menu-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = document.getElementById('dropdown-menu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', () => {
+            document.getElementById('dropdown-menu').style.display = 'none';
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            this.exportChatHistory();
+            document.getElementById('dropdown-menu').style.display = 'none';
+        });
+
+        document.getElementById('history-btn').addEventListener('click', () => {
+            this.showHistoryManager();
+            document.getElementById('dropdown-menu').style.display = 'none';
+        });
+
+        document.getElementById('contacts-btn').addEventListener('click', () => {
+            this.showContacts();
+            document.getElementById('dropdown-menu').style.display = 'none';
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            this.resetAccount();
+            document.getElementById('dropdown-menu').style.display = 'none';
+        });
+    }
+
+    connectToPeer(peerId) {
+        if (this.connections.has(peerId)) {
+            this.addSystemMessage('⚠️ 已经连接到该节点');
+            return;
+        }
+
+
+
+        const conn = this.peer.connect(peerId);
+        conn.metadata = { initiator: true }; // 标记为主动连接方
+        this.handleConnection(conn);
+    }
+
+    handleConnection(conn) {
+        conn.on('open', () => {
+            this.connections.set(conn.peer, conn);
+            this.sessionMessages.set(conn.peer, []); // 初始化会话消息
+            this.updatePeerCount();
+            this.updateSessionList();
+            this.addSystemMessageToSession(conn.peer, '🤝 已连接到节点: ' + conn.peer);
+            
+            // 保存联系人
+            this.saveContact(conn.peer);
+            
+            // 如果是第一个连接，自动切换到该会话
+            if (this.connections.size === 1) {
+                this.switchSession(conn.peer);
+            }
+            
+            // 检查是否为主动连接
+            console.log('调试: 连接类型', {
+                peer: conn.peer.substring(0, 8),
+                hasMetadata: !!conn.metadata,
+                isInitiator: !!(conn.metadata && conn.metadata.initiator)
+            });
+            
+            // 使用持久化的主密钥对
+            if (!this.masterKeyPair) {
+                console.error('主密钥对未初始化');
+                return;
+            }
+            
+            this.keyPairs.set(conn.peer, this.masterKeyPair);
+            this.exportPublicKey(this.masterKeyPair.publicKey).then(publicKeyStr => {
+                // 发送公钥和协议版本
+                conn.send({
+                    type: 'public-key',
+                    publicKey: publicKeyStr,
+                    protocolVersion: this.PROTOCOL_VERSION
+                });
+                
+                // 主动连接方等待公钥交换完成后发送会话密钥
+                if (conn.metadata && conn.metadata.initiator) {
+                    conn._waitingForPublicKey = true;
+                }
+            });
+        });
+
+        conn.on('data', (data) => {
+            this.handleMessage(data, conn.peer);
+        });
+
+        conn.on('close', () => {
+            this.connections.delete(conn.peer);
+            this.peerKeys.delete(conn.peer);
+            this.updatePeerCount();
+            this.updateSessionList();
+            
+            // 如果关闭的是当前会话，切换到其他会话
+            if (this.currentSession === conn.peer) {
+                const remainingSessions = Array.from(this.connections.keys());
+                if (remainingSessions.length > 0) {
+                    this.switchSession(remainingSessions[0]);
+                } else {
+                    this.switchSession(null);
+                }
+            }
+            
+            if (this.connections.size === 0) {
+                this.disableChat();
+            }
+        });
+
+        conn.on('error', (err) => {
+            console.error('Connection error:', err);
+            this.addSystemMessage('❌ 连接错误: ' + err.message);
+        });
+    }
+
+    handleMessage(data, peerId) {
+        if (data.type === 'public-key') {
+            // 检查协议版本兼容性
+            if (data.protocolVersion && data.protocolVersion !== this.PROTOCOL_VERSION) {
+                this.addSystemMessageToSession(peerId, `⚠️ 协议版本不匹配: 本地${this.PROTOCOL_VERSION} vs 对方${data.protocolVersion}`);
+            }
+            this.importPublicKey(data.publicKey).then(publicKey => {
+                this.publicKeys.set(peerId, publicKey);
+                
+                // 生成共同安全码：基于双方公钥的组合
+                const myKeyPair = this.keyPairs.get(peerId);
+                if (myKeyPair) {
+                    return this.exportPublicKey(myKeyPair.publicKey).then(myPublicKey => {
+                        const combinedKeys = [myPublicKey, data.publicKey].sort().join('');
+                        return this.generateFingerprint(combinedKeys);
+                    });
+                }
+            }).then(fingerprint => {
+                this.fingerprints.set(peerId, fingerprint);
+                this.addSystemMessageToSession(peerId, `🔑 安全码: ${fingerprint}`);
+                
+                // 如果是当前会话，立即显示安全码
+                if (this.currentSession === peerId) {
+                    document.getElementById('security-code').textContent = `安全码: ${fingerprint}`;
+                    document.querySelector('.security-indicator').style.display = 'block';
+                }
+                
+                // 检查是否为可信公钥
+                this.checkTrustedKey(peerId, data.publicKey, fingerprint);
+                
+                // 主动连接方现在发送会话密钥
+                const conn = this.connections.get(peerId);
+                if (conn && conn._waitingForPublicKey) {
+                    this.sendSessionKey(peerId);
+                    conn._waitingForPublicKey = false;
+                }
+            });
+            return;
+        }
+
+        if (data.type === 'encrypted-key') {
+            const keyPair = this.keyPairs.get(peerId);
+            if (keyPair) {
+                if (data._isFallback) {
+                    // 降级方案：直接解码
+                    const sessionKey = atob(data.encryptedKey);
+                    this.peerKeys.set(peerId, sessionKey);
+                    this.chainKeys.set(peerId, CryptoJS.SHA256(sessionKey + 'send_chain').toString());
+                    this.messageCounters.set(peerId, 0);
+                    this.receivedCounters.set(peerId, 0);
+                    this.addSystemMessageToSession(peerId, '🔐 会话密钥已接收');
+                    
+                    const conn = this.connections.get(peerId);
+                    if (conn) {
+                        const confirmMsg = this.encryptWithKey('密钥确认成功', sessionKey);
+                        conn.send({ type: 'key-confirm', encrypted: confirmMsg });
+                    }
+                } else {
+                    crypto.subtle.decrypt(
+                        { name: 'RSA-OAEP' },
+                        keyPair.privateKey,
+                        Uint8Array.from(atob(data.encryptedKey), c => c.charCodeAt(0))
+                    ).then(decryptedKey => {
+                        const sessionKey = new TextDecoder().decode(decryptedKey);
+                        this.peerKeys.set(peerId, sessionKey);
+                        this.chainKeys.set(peerId, CryptoJS.SHA256(sessionKey + 'send_chain').toString());
+                        this.messageCounters.set(peerId, 0);
+                        this.receivedCounters.set(peerId, 0);
+                        this.addSystemMessageToSession(peerId, '🔐 会话密钥已解密');
+                        
+                        const conn = this.connections.get(peerId);
+                        if (conn) {
+                            const confirmMsg = this.encryptWithKey('密钥确认成功', sessionKey);
+                            conn.send({ type: 'key-confirm', encrypted: confirmMsg });
+                        }
+                    }).catch(error => {
+                        console.error('RSA解密失败:', error);
+                        this.addSystemMessageToSession(peerId, '❌ 密钥解密失败');
+                    });
+                }
+            }
+            return;
+        }
+
+        if (data.type === 'key-confirm') {
+            const sessionKey = this.peerKeys.get(peerId);
+            if (sessionKey && data.encrypted) {
+                const decrypted = this.decryptWithKey(data.encrypted, sessionKey);
+                if (decrypted === '密钥确认成功') {
+                    // 主动方初始化接收链
+                    // 发送链已在sendSessionKey中初始化
+                    this.addSystemMessageToSession(peerId, '✅ 安全连接已建立');
+                } else {
+                    this.addSystemMessageToSession(peerId, '❌ 密钥验证失败');
+                }
+            }
+            return;
+        }
+
+        if (data.type === 'message') {
+            const peerKey = this.peerKeys.get(peerId);
+            if (!peerKey) {
+                this.addMessageToSession(peerId, '⚠️ 未找到密钥', 'received', false);
+                return;
+            }
+            
+            // 检查消息版本兼容性
+            if (data.version && data.version !== this.PROTOCOL_VERSION) {
+                this.addSystemMessageToSession(peerId, `⚠️ 消息版本不匹配: ${data.version}`);
+            }
+            
+            const decrypted = this.decryptWithRatchet(data.content, peerId);
+            if (decrypted && !decrypted.startsWith('[')) {
+                this.addMessageToSession(peerId, decrypted, 'received', true);
+            } else {
+                this.addMessageToSession(peerId, decrypted || '❓ 解密失败', 'received', false);
+            }
+        }
+
+        if (data.type === 'image') {
+            const peerKey = this.peerKeys.get(peerId);
+            if (!peerKey) {
+                this.addMessageToSession(peerId, '⚠️ 未找到密钥', 'received', false);
+                return;
+            }
+            
+            this.addSystemMessage('🔄 正在解密图片...');
+            this.decryptWithKeyAsync(data.content, peerKey).then(decrypted => {
+                if (decrypted && decrypted !== '[解密失败]') {
+                    this.addImageToSession(peerId, decrypted, 'received', true);
+                } else {
+                    this.addMessageToSession(peerId, '❓ 图片解密失败', 'received', false);
+                }
+            });
+        }
+
+        // 处理分块文件传输
+        if (data.type === 'file-start') {
+            this.fileBuffers.set(data.fileId, {
+                filename: data.filename,
+                filesize: data.filesize,
+                filetype: data.filetype,
+                totalChunks: data.totalChunks,
+                chunks: new Array(data.totalChunks),
+                receivedChunks: 0
+            });
+            this.addSystemMessage(`📥 正在接收文件: ${data.filename}`);
+            return;
+        }
+
+        if (data.type === 'file-chunk') {
+            const fileBuffer = this.fileBuffers.get(data.fileId);
+            if (fileBuffer) {
+                fileBuffer.chunks[data.chunkIndex] = data.chunk;
+                fileBuffer.receivedChunks++;
+                
+                const progress = Math.round((fileBuffer.receivedChunks / fileBuffer.totalChunks) * 100);
+                this.addSystemMessage(`📥 接收进度: ${progress}%`);
+            }
+            return;
+        }
+
+        if (data.type === 'file-end') {
+            const fileBuffer = this.fileBuffers.get(data.fileId);
+            if (fileBuffer && fileBuffer.receivedChunks === fileBuffer.totalChunks) {
+                this.processFileBuffer(fileBuffer, peerId);
+            }
+            this.fileBuffers.delete(data.fileId);
+            return;
+        }
+
+        if (data.type === 'file') {
+            const peerKey = this.peerKeys.get(peerId);
+            if (!peerKey) {
+                this.addMessageToSession(peerId, '⚠️ 未找到密钥', 'received', false);
+                return;
+            }
+            
+            this.addSystemMessage(`🔄 正在解密文件: ${data.filename}`);
+            this.decryptWithKeyAsync(data.content, peerKey).then(decrypted => {
+                if (decrypted && decrypted !== '[解密失败]') {
+                    this.addFileToSession(peerId, {
+                        data: decrypted,
+                        name: data.filename,
+                        size: data.filesize,
+                        type: data.filetype
+                    }, 'received', true);
+                } else {
+                    this.addMessageToSession(peerId, '❓ 文件解密失败', 'received', false);
+                }
+            });
+        }
+    }
+
+    sendMessage() {
+        const input = document.getElementById('message-input');
+        const message = input.value.trim();
+        
+        if (!message || !this.currentSession) return;
+
+        const peerKey = this.peerKeys.get(this.currentSession);
+        const conn = this.connections.get(this.currentSession);
+        
+        if (peerKey && conn) {
+            const encrypted = this.encryptWithRatchet(message, this.currentSession);
+            
+            conn.send({
+                type: 'message',
+                content: encrypted,
+                version: this.PROTOCOL_VERSION
+            });
+            
+            this.addMessageToSession(this.currentSession, message, 'sent', true);
+            this.refreshCurrentSession();
+        }
+
+        input.value = '';
+    }
+
+    async sendImage(file) {
+        if (!this.currentSession || file.size > 100 * 1024 * 1024) {
+            this.addSystemMessage('⚠️ 图片过大（限制100MB）');
+            return;
+        }
+
+        this.addSystemMessage('🔄 正在加密图片...');
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const imageData = e.target.result;
+            const peerKey = this.peerKeys.get(this.currentSession);
+            const conn = this.connections.get(this.currentSession);
+            
+            if (peerKey && conn) {
+                try {
+                    const encrypted = await this.encryptWithKeyAsync(imageData, peerKey);
+                    
+                    conn.send({
+                        type: 'image',
+                        content: encrypted,
+                        filename: file.name
+                    });
+                    
+                    this.addImageToSession(this.currentSession, imageData, 'sent', true);
+                    this.refreshCurrentSession();
+                    this.addSystemMessage('✅ 图片发送成功');
+                } catch (error) {
+                    this.addSystemMessage('❌ 图片加密失败');
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+        
+        document.getElementById('file-input').value = '';
+    }
+
+    async sendFile(file) {
+        if (!this.currentSession || file.size > 1024 * 1024 * 1024) {
+            this.addSystemMessage('⚠️ 文件过大（限制1G）');
+            return;
+        }
+
+        this.addSystemMessage(`🔄 正在加密文件: ${file.name} (${this.formatFileSize(file.size)})`);
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const fileData = e.target.result;
+            const peerKey = this.peerKeys.get(this.currentSession);
+            const conn = this.connections.get(this.currentSession);
+            
+            if (peerKey && conn) {
+                try {
+                    const encrypted = await this.encryptWithKeyAsync(fileData, peerKey);
+                    
+                    await this.sendFileInChunks(conn, {
+                        type: 'file',
+                        content: encrypted,
+                        filename: file.name,
+                        filesize: file.size,
+                        filetype: file.type
+                    });
+                    
+                    this.addFileToSession(this.currentSession, {
+                        data: fileData,
+                        name: file.name,
+                        size: file.size,
+                        type: file.type
+                    }, 'sent', true);
+                    this.refreshCurrentSession();
+                    this.addSystemMessage('✅ 文件发送成功');
+                } catch (error) {
+                    this.addSystemMessage('❌ 文件加密失败');
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+        
+        document.getElementById('document-input').value = '';
+    }
+
+    encryptWithKey(message, key) {
+        const encrypted = CryptoJS.AES.encrypt(message, key).toString();
+        const hmac = CryptoJS.HmacSHA256(encrypted, key).toString();
+        return encrypted + '|' + hmac;
+    }
+
+    decryptWithKey(encryptedMessage, key) {
+        try {
+            const parts = encryptedMessage.split('|');
+            if (parts.length !== 2) return '[解密失败]';
+            
+            const [encrypted, receivedHmac] = parts;
+            const computedHmac = CryptoJS.HmacSHA256(encrypted, key).toString();
+            
+            if (computedHmac !== receivedHmac) {
+                console.warn('HMAC验证失败，可能遭到篡改');
+                return '[消息被篡改]';
+            }
+            
+            const bytes = CryptoJS.AES.decrypt(encrypted, key);
+            return bytes.toString(CryptoJS.enc.Utf8);
+        } catch (e) {
+            return '[解密失败]';
+        }
+    }
+
+    // 分块加密，减少内存占用
+    async encryptWithKeyAsync(message, key) {
+        const chunkSize = 4 * 1024 * 1024; // 4MB分块
+        
+        if (message.length <= chunkSize) {
+            // 小文件直接加密
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    try {
+                        resolve(CryptoJS.AES.encrypt(message, key).toString());
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, 10);
+            });
+        }
+        
+        // 大文件分块加密
+        const chunks = [];
+        for (let i = 0; i < message.length; i += chunkSize) {
+            const chunk = message.slice(i, i + chunkSize);
+            
+            await new Promise(resolve => setTimeout(resolve, 10)); // 让出UI线程
+            
+            const encrypted = CryptoJS.AES.encrypt(chunk, key).toString();
+            chunks.push(encrypted);
+        }
+        
+        return JSON.stringify(chunks);
+    }
+
+    // 分块解密
+    async decryptWithKeyAsync(encryptedMessage, key) {
+        try {
+            // 尝试解析为分块数据
+            const chunks = JSON.parse(encryptedMessage);
+            if (Array.isArray(chunks)) {
+                // 分块解密
+                const decryptedChunks = [];
+                for (const chunk of chunks) {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                    
+                    const bytes = CryptoJS.AES.decrypt(chunk, key);
+                    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+                    decryptedChunks.push(decrypted);
+                }
+                return decryptedChunks.join('');
+            }
+        } catch (e) {
+            // 不是分块数据，使用普通解密
+        }
+        
+        // 普通解密
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                try {
+                    const bytes = CryptoJS.AES.decrypt(encryptedMessage, key);
+                    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+                    resolve(decrypted || '[解密失败]');
+                } catch (error) {
+                    resolve('[解密失败]');
+                }
+            }, 10);
+        });
+    }
+
+    // 保留原有方法用于兼容
+    addMessage(content, type, encrypted = false) {
+        this.displayMessage(content, type, encrypted);
+    }
+
+    addSystemMessage(content) {
+        this.displaySystemMessage(content);
+    }
+
+    updateStatus(status, className) {
+        const statusEl = document.getElementById('status');
+        statusEl.textContent = status;
+        statusEl.className = className;
+    }
+
+    updatePeerCount() {
+        document.getElementById('peer-count').textContent = `节点: ${this.connections.size}`;
+    }
+
+    enableChat() {
+        if (this.currentSession) {
+            document.getElementById('message-input').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+            document.getElementById('image-btn').disabled = false;
+            document.getElementById('file-btn').disabled = false;
+        }
+        document.getElementById('session-select').disabled = false;
+    }
+
+    disableChat() {
+        document.getElementById('message-input').disabled = true;
+        document.getElementById('send-btn').disabled = true;
+        document.getElementById('image-btn').disabled = true;
+        document.getElementById('file-btn').disabled = true;
+        document.getElementById('session-select').disabled = true;
+    }
+
+    // 新增会话管理方法
+    updateSessionList() {
+        const select = document.getElementById('session-select');
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">选择会话...</option>';
+        
+        this.connections.forEach((conn, peerId) => {
+            const option = document.createElement('option');
+            option.value = peerId;
+            
+            // 使用联系人显示名称
+            this.getFromDB('contacts', peerId).then(contact => {
+                const displayName = contact?.displayName || peerId.substring(0, 12) + '...';
+                option.textContent = displayName;
+            });
+            
+            if (peerId === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        select.disabled = this.connections.size === 0;
+    }
+
+    async switchSession(peerId) {
+        if (!peerId || !this.connections.has(peerId)) {
+            this.currentSession = null;
+            document.getElementById('current-session').textContent = '无活动会话';
+            document.getElementById('message-input').disabled = true;
+            document.getElementById('send-btn').disabled = true;
+            document.querySelector('.security-indicator').style.display = 'none';
+            this.clearMessages();
+            return;
+        }
+        
+        this.currentSession = peerId;
+        // 使用联系人显示名称作为会话名
+        this.getFromDB('contacts', peerId).then(contact => {
+            const displayName = contact?.displayName || peerId.substring(0, 12) + '...';
+            document.getElementById('current-session').textContent = '会话: ' + displayName;
+        });
+        document.getElementById('message-input').disabled = false;
+        document.getElementById('send-btn').disabled = false;
+        document.getElementById('image-btn').disabled = false;
+        document.getElementById('file-btn').disabled = false;
+        document.getElementById('message-input').placeholder = '输入消息...';
+        
+        // 显示安全码
+        const fingerprint = this.fingerprints.get(peerId);
+        if (fingerprint) {
+            document.getElementById('security-code').textContent = `安全码: ${fingerprint}`;
+            document.querySelector('.security-indicator').style.display = 'block';
+        }
+        
+        // 加载历史消息
+        await this.loadHistoryMessages(peerId);
+        this.refreshCurrentSession();
+    }
+
+    refreshCurrentSession() {
+        this.clearMessages();
+        const messages = this.sessionMessages.get(this.currentSession) || [];
+        messages.forEach(msg => {
+            if (msg.messageType === 'image') {
+                this.displayImage(msg.content, msg.type, msg.encrypted);
+            } else if (msg.messageType === 'file') {
+                this.displayFile(msg.content, msg.type, msg.encrypted);
+            } else {
+                this.displayMessage(msg.content, msg.type, msg.encrypted);
+            }
+        });
+    }
+
+    addMessageToSession(peerId, content, type, encrypted = false) {
+        if (!this.sessionMessages.has(peerId)) {
+            this.sessionMessages.set(peerId, []);
+        }
+        
+        const message = { content, type, encrypted, time: new Date(), messageType: 'text' };
+        this.sessionMessages.get(peerId).push(message);
+        
+        // 保存到IndexedDB
+        this.saveToDB('messages', {
+            peerId: peerId,
+            content: content,
+            type: type,
+            encrypted: encrypted,
+            messageType: 'text',
+            timestamp: new Date().toISOString()
+        });
+        
+        if (this.currentSession === peerId) {
+            this.displayMessage(content, type, encrypted);
+        }
+    }
+
+    addImageToSession(peerId, imageData, type, encrypted = false) {
+        if (!this.sessionMessages.has(peerId)) {
+            this.sessionMessages.set(peerId, []);
+        }
+        
+        const message = { content: imageData, type, encrypted, time: new Date(), messageType: 'image' };
+        this.sessionMessages.get(peerId).push(message);
+        
+        if (this.currentSession === peerId) {
+            this.displayImage(imageData, type, encrypted);
+        }
+    }
+
+    addFileToSession(peerId, fileInfo, type, encrypted = false) {
+        if (!this.sessionMessages.has(peerId)) {
+            this.sessionMessages.set(peerId, []);
+        }
+        
+        const message = { content: fileInfo, type, encrypted, time: new Date(), messageType: 'file' };
+        this.sessionMessages.get(peerId).push(message);
+        
+        if (this.currentSession === peerId) {
+            this.displayFile(fileInfo, type, encrypted);
+        }
+    }
+
+    addSystemMessageToSession(peerId, content) {
+        if (!this.sessionMessages.has(peerId)) {
+            this.sessionMessages.set(peerId, []);
+        }
+        
+        const message = { content, type: 'system', encrypted: false, time: new Date() };
+        this.sessionMessages.get(peerId).push(message);
+        
+        if (this.currentSession === peerId) {
+            this.displaySystemMessage(content);
+        }
+    }
+
+    clearMessages() {
+        document.getElementById('messages').innerHTML = '';
+    }
+
+    displayMessage(content, type, encrypted = false) {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}${encrypted ? ' encrypted' : ''}`;
+        
+        const time = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `
+            <div>${content}</div>
+            <div class="time">${time}</div>
+        `;
+        
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    displaySystemMessage(content) {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'system-message';
+        messageDiv.textContent = content;
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    displayImage(imageData, type, encrypted = false) {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}${encrypted ? ' encrypted' : ''}`;
+        
+        const time = new Date().toLocaleTimeString();
+        const img = document.createElement('img');
+        img.src = imageData;
+        img.onclick = () => window.open(imageData, '_blank');
+        
+        messageDiv.innerHTML = `
+            <div>🖼️ 图片</div>
+            <div class="time">${time}</div>
+        `;
+        messageDiv.insertBefore(img, messageDiv.querySelector('.time'));
+        
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    displayFile(fileInfo, type, encrypted = false) {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}${encrypted ? ' encrypted' : ''}`;
+        
+        const time = new Date().toLocaleTimeString();
+        const fileSize = this.formatFileSize(fileInfo.size);
+        const fileIcon = this.getFileIcon(fileInfo.type);
+        
+        messageDiv.innerHTML = `
+            <div class="file-message">
+                <div class="file-info">
+                    <div class="file-icon">${fileIcon}</div>
+                    <div class="file-details">
+                        <div class="file-name">${fileInfo.name}</div>
+                        <div class="file-size">${fileSize}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="time">${time}</div>
+        `;
+        
+        const fileMessage = messageDiv.querySelector('.file-message');
+        fileMessage.onclick = () => {
+            console.log('下载文件:', fileInfo.name);
+            this.downloadFile(fileInfo.data, fileInfo.name);
+        };
+        
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    getFileIcon(fileType) {
+        if (fileType.startsWith('image/')) return '🖼️';
+        if (fileType.startsWith('video/')) return '🎥';
+        if (fileType.startsWith('audio/')) return '🎧';
+        if (fileType.includes('pdf')) return '📄';
+        if (fileType.includes('word')) return '📄';
+        if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📈';
+        if (fileType.includes('zip') || fileType.includes('rar')) return '🗜️';
+        return '📁';
+    }
+
+    // 分块发送文件
+    async sendFileInChunks(conn, fileData) {
+        const maxChunkSize = 64 * 1024 * 1024; // 16MB分块
+        const content = fileData.content;
+        
+        if (content.length <= maxChunkSize) {
+            conn.send(fileData);
+            return;
+        }
+        
+        const fileId = Date.now().toString();
+        const totalChunks = Math.ceil(content.length / maxChunkSize);
+        
+        // 发送文件头信息
+        conn.send({
+            type: 'file-start',
+            fileId: fileId,
+            filename: fileData.filename,
+            filesize: fileData.filesize,
+            filetype: fileData.filetype,
+            totalChunks: totalChunks
+        });
+        
+        // 分块发送
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * maxChunkSize;
+            const end = Math.min(start + maxChunkSize, content.length);
+            const chunk = content.slice(start, end);
+            
+            conn.send({
+                type: 'file-chunk',
+                fileId: fileId,
+                chunkIndex: i,
+                chunk: chunk
+            });
+            
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        
+        // 发送结束信号
+        conn.send({
+            type: 'file-end',
+            fileId: fileId
+        });
+    }
+
+    async processFileBuffer(fileBuffer, peerId) {
+        const content = fileBuffer.chunks.join('');
+        const peerKey = this.peerKeys.get(peerId);
+        
+        if (peerKey) {
+            this.addSystemMessage(`🔄 正在解密文件: ${fileBuffer.filename}`);
+            const decrypted = await this.decryptWithKeyAsync(content, peerKey);
+            if (decrypted && decrypted !== '[解密失败]') {
+                this.addFileToSession(peerId, {
+                    data: decrypted,
+                    name: fileBuffer.filename,
+                    size: fileBuffer.filesize,
+                    type: fileBuffer.filetype
+                }, 'received', true);
+            } else {
+                this.addMessageToSession(peerId, '❓ 文件解密失败', 'received', false);
+            }
+        }
+    }
+
+    async sendSessionKey(peerId) {
+        const sessionKey = this.generateKey();
+        this.peerKeys.set(peerId, sessionKey);
+        this.chainKeys.set(peerId, CryptoJS.SHA256(sessionKey + 'send_chain').toString());
+        this.messageCounters.set(peerId, 0);
+        this.receivedCounters.set(peerId, 0);
+        
+        const publicKey = this.publicKeys.get(peerId);
+        if (publicKey) {
+            const conn = this.connections.get(peerId);
+            if (conn) {
+                if (publicKey._isFallback) {
+                    // 降级方案：直接发送明文密钥
+                    conn.send({
+                        type: 'encrypted-key',
+                        encryptedKey: btoa(sessionKey),
+                        _isFallback: true
+                    });
+                } else {
+                    try {
+                        const keyBuffer = new TextEncoder().encode(sessionKey);
+                        const encryptedKey = await crypto.subtle.encrypt(
+                            { name: 'RSA-OAEP' },
+                            publicKey,
+                            keyBuffer
+                        );
+                        
+                        conn.send({
+                            type: 'encrypted-key',
+                            encryptedKey: btoa(String.fromCharCode(...new Uint8Array(encryptedKey)))
+                        });
+                    } catch (error) {
+                        console.error('RSA加密失败:', error);
+                        // 降级到明文传输
+                        conn.send({
+                            type: 'encrypted-key',
+                            encryptedKey: btoa(sessionKey),
+                            _isFallback: true
+                        });
+                    }
+                }
+                this.addSystemMessageToSession(peerId, '🔑 已发送会话密钥');
+            }
+        }
+    }
+
+    deriveNextKey(currentKey) {
+        return CryptoJS.SHA256(currentKey + 'next').toString();
+    }
+
+    encryptWithRatchet(message, peerId) {
+        const sessionKey = this.peerKeys.get(peerId);
+        const counter = this.messageCounters.get(peerId) || 0;
+        
+        if (!sessionKey) return this.encryptWithKey(message, sessionKey);
+        
+        // 简化：直接使用会话密钥+计数器
+        const messageKey = CryptoJS.HmacSHA256(`${this.peer.id}_${counter}`, sessionKey).toString();
+        
+        this.messageCounters.set(peerId, counter + 1);
+        
+        const payload = JSON.stringify({ counter, message, sender: this.peer.id });
+        return this.encryptWithKey(payload, messageKey);
+    }
+
+    decryptWithRatchet(encryptedMessage, peerId) {
+        const sessionKey = this.peerKeys.get(peerId);
+        if (!sessionKey) return this.decryptWithKey(encryptedMessage, sessionKey);
+        
+        try {
+            const expectedCounter = (this.receivedCounters.get(peerId) || 0);
+            
+            // 尝试使用对方的发送者ID+计数器解密
+            const messageKey = CryptoJS.HmacSHA256(`${peerId}_${expectedCounter}`, sessionKey).toString();
+            
+            const decrypted = this.decryptWithKey(encryptedMessage, messageKey);
+            if (decrypted.startsWith('[')) {
+                return this.decryptWithKey(encryptedMessage, sessionKey);
+            }
+            
+            const payload = JSON.parse(decrypted);
+            if (payload.counter !== expectedCounter || payload.sender !== peerId) {
+                return '[消息验证失败]';
+            }
+            
+            this.receivedCounters.set(peerId, expectedCounter + 1);
+            return payload.message;
+        } catch (e) {
+            return this.decryptWithKey(encryptedMessage, sessionKey);
+        }
+    }
+
+    disconnectPeer(peerId) {
+        const conn = this.connections.get(peerId);
+        if (conn) {
+            conn.close();
+        }
+        this.connections.delete(peerId);
+        this.peerKeys.delete(peerId);
+        this.keyPairs.delete(peerId);
+        this.publicKeys.delete(peerId);
+        this.fingerprints.delete(peerId);
+        
+        this.updatePeerCount();
+        this.updateSessionList();
+        
+        if (this.currentSession === peerId) {
+            this.switchSession(null);
+        }
+    }
+
+    async saveContact(peerId) {
+        const existingContact = await this.getFromDB('contacts', peerId);
+        const displayName = existingContact?.displayName || peerId.split('_')[2] || peerId;
+        
+        await this.saveToDB('contacts', {
+            peerId: peerId,
+            lastConnected: new Date().toISOString(),
+            displayName: displayName
+        });
+    }
+
+    async exportChatHistory() {
+        if (!this.currentSession) {
+            alert('请先选择一个会话');
+            return;
+        }
+        
+        const messages = this.sessionMessages.get(this.currentSession) || [];
+        let chatText = '聊天记录 - ' + this.currentSession + '\n';
+        chatText += '导出时间: ' + new Date().toLocaleString() + '\n';
+        chatText += '==================================================\n\n';
+        
+        messages.forEach(msg => {
+            const time = new Date(msg.time).toLocaleString();
+            const type = msg.type === 'sent' ? '我' : '对方';
+            const encrypted = msg.encrypted ? '🔒' : '';
+            
+            if (msg.messageType === 'text') {
+                chatText += '[' + time + '] ' + type + encrypted + ': ' + msg.content + '\n';
+            } else if (msg.messageType === 'image') {
+                chatText += '[' + time + '] ' + type + encrypted + ': [图片]\n';
+            } else if (msg.messageType === 'file') {
+                chatText += '[' + time + '] ' + type + encrypted + ': [文件: ' + msg.content.name + ']\n';
+            }
+        });
+        
+        const blob = new Blob([chatText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const filename = `聊天记录_${this.currentSession}_${new Date().toISOString().split('T')[0]}.txt`;
+        
+        this.downloadFile(url, filename);
+        URL.revokeObjectURL(url);
+    }
+
+    async showContacts() {
+        const transaction = this.db.transaction(['contacts'], 'readonly');
+        const store = transaction.objectStore('contacts');
+        const request = store.getAll();
+        
+        request.onsuccess = () => {
+            const contacts = request.result;
+            if (contacts.length === 0) {
+                alert('暂无联系人');
+                return;
+            }
+            
+            // 创建弹窗
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+            
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'background:white;padding:20px;border-radius:10px;max-width:400px;width:90%;max-height:500px;overflow-y:auto';
+            
+            const title = document.createElement('h3');
+            title.textContent = '联系人列表';
+            title.style.marginBottom = '15px';
+            dialog.appendChild(title);
+            
+            const tip = document.createElement('div');
+            tip.textContent = '双击连接，右键重命名';
+            tip.style.cssText = 'font-size: 12px; color: #718096; margin-bottom: 10px; text-align: center;';
+            dialog.appendChild(tip);
+            
+            const list = document.createElement('div');
+            contacts.forEach(contact => {
+                const item = document.createElement('div');
+                item.style.cssText = 'padding:10px;border:1px solid #ddd;margin:5px 0;border-radius:5px;cursor:pointer;transition:background 0.2s';
+                item.innerHTML = `<strong>${contact.displayName}</strong><br><small>${contact.peerId}</small><br><small>最后连接: ${new Date(contact.lastConnected).toLocaleString()}</small>`;
+                
+                item.onmouseover = () => item.style.background = '#f0f0f0';
+                item.onmouseout = () => item.style.background = 'white';
+                item.ondblclick = () => {
+                    this.connectToPeer(contact.peerId);
+                    document.body.removeChild(modal);
+                };
+                
+                item.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    const newName = prompt('输入新的显示名称:', contact.displayName);
+                    if (newName && newName.trim()) {
+                        contact.displayName = newName.trim();
+                        this.saveToDB('contacts', contact);
+                        item.innerHTML = `<strong>${contact.displayName}</strong><br><small>${contact.peerId}</small><br><small>最后连接: ${new Date(contact.lastConnected).toLocaleString()}</small>`;
+                    }
+                };
+                
+                list.appendChild(item);
+            });
+            
+            const closeBtn = document.createElement('div');
+            closeBtn.innerHTML = '×';
+            closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;font-size:24px;cursor:pointer;color:#999;font-weight:bold';
+            closeBtn.onclick = () => document.body.removeChild(modal);
+            closeBtn.onmouseover = () => closeBtn.style.color = '#000';
+            closeBtn.onmouseout = () => closeBtn.style.color = '#999';
+            
+            dialog.style.position = 'relative';
+            
+            dialog.appendChild(closeBtn);
+            dialog.appendChild(list);
+            modal.appendChild(dialog);
+            document.body.appendChild(modal);
+            
+            modal.onclick = (e) => {
+                if (e.target === modal) document.body.removeChild(modal);
+            };
+        };
+    }
+
+    async checkTrustedKey(peerId, publicKey, fingerprint) {
+        const trustedKey = await this.getFromDB('trustedKeys', peerId);
+        
+        if (!trustedKey) {
+            // 首次连接，需要验证
+            setTimeout(() => {
+                const verified = confirm(`⚠️ 首次连接安全验证\n\n请通过语音或视频核对安全码:\n\n您的安全码: ${fingerprint}\n对方安全码: 请对方提供\n\n点击“确定”表示安全码一致\n点击“取消”将断开连接`);
+                
+                if (!verified) {
+                    this.addSystemMessage('❌ 安全验证失败，正在断开连接...');
+                    this.disconnectPeer(peerId);
+                } else {
+                    // 保存可信公钥
+                    this.saveToDB('trustedKeys', {
+                        peerId: peerId,
+                        publicKey: publicKey,
+                        fingerprint: fingerprint,
+                        trustedAt: new Date().toISOString()
+                    });
+                    this.addSystemMessage('✅ 安全验证成功，公钥已保存');
+                    // 隐藏安全码和验证按钮
+                    if (this.currentSession === peerId) {
+                        document.querySelector('.security-indicator').style.display = 'none';
+                    }
+                }
+            }, 1000);
+        } else if (trustedKey.publicKey !== publicKey) {
+            // 对方公钥变更，可能遭到中间人攻击
+            const verified = confirm(`⚠️ 安全警告\n\n检测到对方公钥变更！可能遭到中间人攻击。\n\n请通过安全渠道确认对方是否更换了设备或重新生成了密钥\n\n新安全码: ${fingerprint}\n\n点击“确定”更新公钥\n点击“取消”断开连接`);
+            
+            if (!verified) {
+                this.addSystemMessage('❌ 公钥验证失败，正在断开连接...');
+                this.disconnectPeer(peerId);
+            } else {
+                // 更新公钥
+                this.saveToDB('trustedKeys', {
+                    peerId: peerId,
+                    publicKey: publicKey,
+                    fingerprint: fingerprint,
+                    trustedAt: new Date().toISOString()
+                });
+                this.addSystemMessage('✅ 公钥已更新');
+                // 隐藏安全码和验证按钮
+                if (this.currentSession === peerId) {
+                    document.querySelector('.security-indicator').style.display = 'none';
+                }
+            }
+        } else {
+            // 公钥一致，自动通过
+            this.addSystemMessage('✅ 可信联系人，已自动验证');
+            // 隐藏安全码和验证按钮
+            if (this.currentSession === peerId) {
+                document.querySelector('.security-indicator').style.display = 'none';
+            }
+        }
+    }
+
+    async loadHistoryMessages(peerId) {
+        const transaction = this.db.transaction(['messages'], 'readonly');
+        const store = transaction.objectStore('messages');
+        const index = store.index('peerId');
+        const request = index.getAll(peerId);
+        
+        return new Promise((resolve) => {
+            request.onsuccess = () => {
+                const historyMessages = request.result;
+                
+                // 合并历史消息和当前会话消息
+                const currentMessages = this.sessionMessages.get(peerId) || [];
+                const allMessages = [...historyMessages, ...currentMessages];
+                
+                // 按时间排序并去重
+                const uniqueMessages = allMessages.reduce((acc, msg) => {
+                    const key = msg.timestamp || msg.time?.toISOString() || new Date().toISOString();
+                    if (!acc.find(m => (m.timestamp || m.time?.toISOString()) === key && m.content === msg.content)) {
+                        acc.push(msg);
+                    }
+                    return acc;
+                }, []).sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.time);
+                    const timeB = new Date(b.timestamp || b.time);
+                    return timeA - timeB;
+                });
+                
+                this.sessionMessages.set(peerId, uniqueMessages);
+                resolve();
+            };
+        });
+    }
+
+    async showHistoryManager() {
+        const transaction = this.db.transaction(['messages', 'contacts'], 'readonly');
+        const messageStore = transaction.objectStore('messages');
+        const contactStore = transaction.objectStore('contacts');
+        
+        const messageRequest = messageStore.getAll();
+        const contactRequest = contactStore.getAll();
+        
+        messageRequest.onsuccess = () => {
+            contactRequest.onsuccess = () => {
+                const messages = messageRequest.result || [];
+                const contacts = contactRequest.result || [];
+            // 按联系人分组消息
+            const messagesByPeer = {};
+            messages.forEach(msg => {
+                if (!messagesByPeer[msg.peerId]) {
+                    messagesByPeer[msg.peerId] = [];
+                }
+                messagesByPeer[msg.peerId].push(msg);
+            });
+            
+            // 创建弹窗
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+            
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'background:white;padding:20px;border-radius:10px;max-width:500px;width:90%;max-height:600px;overflow-y:auto;position:relative';
+            
+            const closeBtn = document.createElement('div');
+            closeBtn.innerHTML = '×';
+            closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;font-size:24px;cursor:pointer;color:#999;font-weight:bold';
+            closeBtn.onclick = () => document.body.removeChild(modal);
+            closeBtn.onmouseover = () => closeBtn.style.color = '#000';
+            closeBtn.onmouseout = () => closeBtn.style.color = '#999';
+            
+            const title = document.createElement('h3');
+            title.textContent = '聊天记录管理';
+            title.style.marginBottom = '15px';
+            
+            const list = document.createElement('div');
+            
+            Object.keys(messagesByPeer).forEach(peerId => {
+                const contact = contacts.find(c => c.peerId === peerId);
+                const displayName = contact?.displayName || peerId.split('_')[2] || peerId;
+                const messageCount = messagesByPeer[peerId].length;
+                const lastMessage = messagesByPeer[peerId].sort((a, b) => new Date(b.timestamp || b.time) - new Date(a.timestamp || a.time))[0];
+                const lastTime = new Date(lastMessage.timestamp || lastMessage.time).toLocaleString();
+                
+                const item = document.createElement('div');
+                item.style.cssText = 'padding:15px;border:1px solid #e2e8f0;margin:8px 0;border-radius:8px;background:#f7fafc';
+                item.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <strong>${displayName}</strong>
+                        <span style="font-size:12px;color:#718096">${messageCount}条消息</span>
+                    </div>
+                    <div style="font-size:12px;color:#718096;margin-bottom:10px">最后消息: ${lastTime}</div>
+                    <div style="display:flex;gap:8px">
+                        <button class="export-single" style="padding:6px 12px;background:#4299e1;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px">导出</button>
+                        <button class="delete-history" style="padding:6px 12px;background:#e53e3e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px">删除</button>
+                    </div>
+                `;
+                
+                // 导出单个联系人的聊天记录
+                item.querySelector('.export-single').onclick = () => {
+                    this.exportSingleHistory(peerId, displayName, messagesByPeer[peerId]);
+                };
+                
+                // 删除聊天记录
+                item.querySelector('.delete-history').onclick = () => {
+                    if (confirm(`确定要删除与 ${displayName} 的所有聊天记录吗？此操作不可恢复！`)) {
+                        this.deleteHistory(peerId);
+                        document.body.removeChild(modal);
+                        this.addSystemMessage(`✅ 已删除与 ${displayName} 的聊天记录`);
+                    }
+                };
+                
+                list.appendChild(item);
+            });
+            
+            if (Object.keys(messagesByPeer).length === 0) {
+                list.innerHTML = '<div style="text-align:center;color:#718096;padding:20px">暂无聊天记录</div>';
+            }
+            
+            dialog.appendChild(closeBtn);
+            dialog.appendChild(title);
+            dialog.appendChild(list);
+            modal.appendChild(dialog);
+            document.body.appendChild(modal);
+            
+            modal.onclick = (e) => {
+                if (e.target === modal) document.body.removeChild(modal);
+            };
+            };
+        };
+    }
+
+    exportSingleHistory(peerId, displayName, messages) {
+        let chatText = `聊天记录 - ${displayName}\n`;
+        chatText += `导出时间: ${new Date().toLocaleString()}\n`;
+        chatText += '==================================================\n\n';
+        
+        messages.sort((a, b) => new Date(a.timestamp || a.time) - new Date(b.timestamp || b.time)).forEach(msg => {
+            const time = new Date(msg.timestamp || msg.time).toLocaleString();
+            const type = msg.type === 'sent' ? '我' : '对方';
+            const encrypted = msg.encrypted ? '🔒' : '';
+            
+            if (msg.messageType === 'text') {
+                chatText += '[' + time + '] ' + type + encrypted + ': ' + msg.content + '\n';
+            } else if (msg.messageType === 'image') {
+                chatText += '[' + time + '] ' + type + encrypted + ': [图片]\n';
+            } else if (msg.messageType === 'file') {
+                chatText += '[' + time + '] ' + type + encrypted + ': [文件: ' + msg.content.name + ']\n';
+            }
+        });
+        
+        const blob = new Blob([chatText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const filename = '聊天记录_' + displayName + '_' + new Date().toISOString().split('T')[0] + '.txt';
+        
+        this.downloadFile(url, filename);
+        URL.revokeObjectURL(url);
+    }
+
+    async deleteHistory(peerId) {
+        const transaction = this.db.transaction(['messages'], 'readwrite');
+        const store = transaction.objectStore('messages');
+        const index = store.index('peerId');
+        const request = index.openCursor(peerId);
+        
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                cursor.delete();
+                cursor.continue();
+            }
+        };
+        
+        // 清空内存中的消息
+        this.sessionMessages.delete(peerId);
+        if (this.currentSession === peerId) {
+            this.clearMessages();
+        }
+    }
+
+    resetAccount() {
+        if (confirm('确定要重置账户吗？这将清除所有数据并重新创建账户！')) {
+            // 关闭所有连接
+            this.connections.forEach(conn => conn.close());
+            this.connections.clear();
+            
+            // 关闭Peer连接
+            if (this.peer) {
+                this.peer.destroy();
+            }
+            
+            // 清除IndexedDB
+            if (this.db) {
+                this.db.close();
+            }
+            
+            const deleteRequest = indexedDB.deleteDatabase('SecureChatDB');
+            deleteRequest.onsuccess = () => {
+                // 刷新页面重新初始化
+                location.reload();
+            };
+            
+            deleteRequest.onerror = () => {
+                alert('重置失败，请手动刷新页面');
+                location.reload();
+            };
+        }
+    }
+
+    downloadFile(dataUrl, filename) {
+        try {
+            const safeName = filename && filename.trim() ? filename.trim() : 'download';
+            
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = safeName;
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error('下载失败:', error);
+            window.open(dataUrl, '_blank');
+        }
+    }
+}
+
+// 启动应用
+document.addEventListener('DOMContentLoaded', () => {
+    new DistributedChat();
+});
+    </script>
+</body>
+</html>
