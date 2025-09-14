@@ -133,6 +133,25 @@
             color: #999;
             text-decoration: line-through;
         }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .system-message {
+            background-color: #f0f0f0;
+            font-style: italic;
+        }
+        .death-message {
+            background-color: #ffebee;
+            color: #c62828;
+            font-weight: bold;
+        }
+        .save-message {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -199,7 +218,8 @@
             witch: {
                 poisonAvailable: true,
                 antidoteAvailable: true
-            }
+            },
+            lastNightDeath: null
         };
 
         // DOM元素
@@ -239,7 +259,7 @@
                 elements.joinGame.style.display = 'none';
                 elements.hostControls.style.display = 'block';
                 
-                addMessage(`游戏已创建，ID: ${id}`);
+                addSystemMessage(`游戏已创建，ID: ${id}`);
             });
             
             gameState.peer.on('connection', (conn) => {
@@ -259,7 +279,7 @@
             });
             
             gameState.peer.on('error', (err) => {
-                addMessage(`错误: ${err.type} - ${err.message}`);
+                addSystemMessage(`错误: ${err.type} - ${err.message}`);
             });
         }
 
@@ -297,13 +317,13 @@
                 });
                 
                 conn.on('data', (data) => handlePlayerMessage(data));
-                conn.on('close', () => addMessage('与主机的连接已断开'));
+                conn.on('close', () => addSystemMessage('与主机的连接已断开'));
                 
                 gameState.connections.host = conn;
             });
             
             gameState.peer.on('error', (err) => {
-                addMessage(`错误: ${err.type} - ${err.message}`);
+                addSystemMessage(`错误: ${err.type} - ${err.message}`);
             });
         }
 
@@ -316,13 +336,18 @@
                 return;
             }
             
-            // 检查至少有一个狼人和一个村民
+            // 检查至少有一个狼人和一个好人阵营玩家
             const players = Object.values(gameState.players);
             const hasWerewolf = players.some(p => p.role === 'werewolf');
-            const hasVillager = players.some(p => p.role === 'villager');
+            const hasGood = players.some(p => p.role !== 'werewolf');
             
-            if (!hasWerewolf || !hasVillager) {
-                alert('至少需要1个狼人和1个村民');
+            if (!hasWerewolf) {
+                alert('至少需要1个狼人');
+                return;
+            }
+            
+            if (!hasGood) {
+                alert('至少需要1个好人阵营玩家');
                 return;
             }
             
@@ -332,6 +357,12 @@
             Object.values(gameState.players).forEach(player => {
                 player.alive = true;
             });
+            
+            // 初始化女巫药水
+            gameState.witch = {
+                poisonAvailable: true,
+                antidoteAvailable: true
+            };
             
             // 发送角色信息给玩家
             Object.entries(gameState.players).forEach(([playerId, player]) => {
@@ -352,10 +383,10 @@
         // 开始夜晚阶段
         function startNightPhase() {
             gameState.phase = 'night';
+            gameState.lastNightDeath = null; // 重置前一晚的死亡信息
             updatePhaseIndicator('夜幕降临，所有人请闭眼', 'night-phase');
             
             if (gameState.isHost) {
-                // 通知所有玩家进入夜晚
                 broadcastMessage({ type: 'night_start' });
                 
                 // 找出所有狼人
@@ -377,7 +408,7 @@
                         startWerewolfVote(werewolves);
                     }, 3000);
                 } else {
-                    addMessage('没有存活的狼人，直接进入白天');
+                    addSystemMessage('没有存活的狼人，直接进入白天');
                     setTimeout(startDayPhase, 3000);
                 }
             }
@@ -385,7 +416,7 @@
 
         // 狼人投票
         function startWerewolfVote(werewolves) {
-            addMessage('狼人请选择要杀死的玩家');
+            addSystemMessage('狼人请选择要杀死的玩家');
             
             if (gameState.isHost) {
                 const alivePlayers = Object.entries(gameState.players)
@@ -410,7 +441,7 @@
                     .map(([id, _]) => id);
                 
                 if (seers.length > 0) {
-                    addMessage('预言家请选择要查验的玩家');
+                    addSystemMessage('预言家请选择要查验的玩家');
                     
                     const alivePlayers = Object.entries(gameState.players)
                         .filter(([_, player]) => player.alive)
@@ -436,15 +467,15 @@
                     .filter(([_, player]) => player.role === 'witch' && player.alive)
                     .map(([id, _]) => id);
                 
-                if (witches.length > 0 && gameState.witchKilledPlayerId) {
-                    addMessage('女巫请选择是否使用解药');
+                if (witches.length > 0 && gameState.lastNightDeath && !gameState.lastNightDeath.saved) {
+                    addSystemMessage('女巫请选择是否使用解药');
                     
                     // 通知女巫行动
                     witches.forEach(witchId => {
                         gameState.connections[witchId].send({
                             type: 'witch_action',
-                            killedPlayerId: gameState.witchKilledPlayerId,
-                            killedPlayerName: gameState.players[gameState.witchKilledPlayerId].name,
+                            killedPlayerId: gameState.lastNightDeath.id,
+                            killedPlayerName: gameState.lastNightDeath.name,
                             antidoteAvailable: gameState.witch.antidoteAvailable,
                             poisonAvailable: gameState.witch.poisonAvailable
                         });
@@ -463,17 +494,48 @@
             if (gameState.isHost) {
                 broadcastMessage({ type: 'day_start' });
                 
+                // 显示前一晚的死亡信息
+                if (gameState.lastNightDeath) {
+                    let deathMsg = '';
+                    if (gameState.lastNightDeath.saved) {
+                        deathMsg = `${gameState.lastNightDeath.name} 被女巫用解药救活了`;
+                        addSaveMessage(deathMsg);
+                    } else {
+                        deathMsg = `${gameState.lastNightDeath.name} 昨晚被狼人杀害`;
+                        addDeathMessage(deathMsg);
+                        
+                        // 更新玩家状态
+                        gameState.players[gameState.lastNightDeath.id].alive = false;
+                        
+                        // 检查猎人技能
+                        if (gameState.players[gameState.lastNightDeath.id].role === 'hunter') {
+                            setTimeout(() => {
+                                startHunterAction(gameState.lastNightDeath.id);
+                            }, 3000);
+                            return;
+                        }
+                    }
+                    
+                    // 广播给所有玩家
+                    broadcastMessage({
+                        type: 'night_death',
+                        message: deathMsg,
+                        playerId: gameState.lastNightDeath.id,
+                        saved: gameState.lastNightDeath.saved
+                    });
+                } else {
+                    addSystemMessage('昨晚平安无事');
+                    broadcastMessage({
+                        type: 'night_death',
+                        message: '昨晚平安无事',
+                        playerId: null,
+                        saved: false
+                    });
+                }
+                
                 // 检查游戏是否结束
                 if (checkGameEnd()) {
                     return;
-                }
-                
-                // 显示昨晚死亡信息
-                if (gameState.lastNightDeath) {
-                    const deathMsg = gameState.lastNightDeath.saved ? 
-                        `${gameState.lastNightDeath.name} 被女巫用解药救活了` :
-                        `${gameState.lastNightDeath.name} 昨晚被狼人杀害`;
-                    addMessage(deathMsg);
                 }
                 
                 // 开始白天讨论和投票
@@ -485,7 +547,7 @@
 
         // 白天投票
         function startDayVote() {
-            addMessage('请讨论并投票处决一名玩家');
+            addSystemMessage('请讨论并投票处决一名玩家');
             
             if (gameState.isHost) {
                 const alivePlayers = Object.entries(gameState.players)
@@ -508,14 +570,14 @@
                     .map(([id, player]) => ({ id, name: player.name }));
                 
                 if (alivePlayers.length > 0) {
-                    addMessage('猎人请选择要带走的玩家');
+                    addSystemMessage('猎人请选择要带走的玩家');
                     
                     gameState.connections[hunterId].send({
                         type: 'hunter_action',
                         players: alivePlayers
                     });
                 } else {
-                    addMessage('没有其他存活的玩家可供猎人选择');
+                    addSystemMessage('没有其他存活的玩家可供猎人选择');
                     setTimeout(() => {
                         checkGameEnd() || setTimeout(startNightPhase, 3000);
                     }, 3000);
@@ -525,15 +587,20 @@
 
         // 检查游戏是否结束
         function checkGameEnd() {
-            const werewolves = Object.values(gameState.players).filter(p => p.role === 'werewolf' && p.alive).length;
-            const villagers = Object.values(gameState.players).filter(p => p.role !== 'werewolf' && p.alive).length;
+            const werewolves = Object.values(gameState.players)
+                .filter(p => p.role === 'werewolf' && p.alive)
+                .length;
+            
+            const goodPlayers = Object.values(gameState.players)
+                .filter(p => p.role !== 'werewolf' && p.alive)
+                .length;
             
             if (werewolves === 0) {
-                addMessage('村民阵营获胜！');
-                broadcastMessage({ type: 'game_over', winner: 'villagers' });
+                addSystemMessage('好人阵营获胜！');
+                broadcastMessage({ type: 'game_over', winner: 'good' });
                 return true;
-            } else if (werewolves >= villagers) {
-                addMessage('狼人阵营获胜！');
+            } else if (werewolves >= goodPlayers) {
+                addSystemMessage('狼人阵营获胜！');
                 broadcastMessage({ type: 'game_over', winner: 'werewolves' });
                 return true;
             }
@@ -613,10 +680,10 @@
             const players = Object.values(gameState.players);
             const allRolesAssigned = players.every(player => player.role);
             const hasWerewolf = players.some(p => p.role === 'werewolf');
-            const hasVillager = players.some(p => p.role === 'villager');
+            const hasGood = players.some(p => p.role !== 'werewolf');
             
             document.getElementById('start-game').disabled = 
-                !allRolesAssigned || !hasWerewolf || !hasVillager;
+                !allRolesAssigned || !hasWerewolf || !hasGood;
         }
 
         // 处理主机收到的消息
@@ -637,7 +704,7 @@
                     
                     updatePlayersList();
                     updateRoleAssignment();
-                    addMessage(`${data.name} 加入了游戏`);
+                    addSystemMessage(`${data.name} 加入了游戏`);
                     checkStartGameConditions();
                     break;
                     
@@ -664,6 +731,10 @@
                 case 'hunter_shot':
                     handleHunterShot(data, conn.peer);
                     break;
+                    
+                case 'hunter_death':
+                    startHunterAction(data.hunterId);
+                    break;
             }
         }
 
@@ -684,11 +755,11 @@
                         <p>${roleDescription}</p>
                     `;
                     
-                    addMessage(`你的角色是: ${roleName}`);
+                    addSystemMessage(`你的角色是: ${roleName}`);
                     break;
                     
                 case 'werewolf_info':
-                    addMessage(`其他狼人是: ${data.werewolves.join(', ')}`);
+                    addSystemMessage(`其他狼人是: ${data.werewolves.join(', ')}`);
                     break;
                     
                 case 'werewolf_vote':
@@ -719,17 +790,18 @@
                     showVoteOptions(data.players, 'hunter_shot', '选择要带走的玩家');
                     break;
                     
-                case 'player_killed':
-                    const deathMsg = data.reason === 'werewolf' ? 
-                        `${data.playerName} 被狼人杀死` :
-                        data.reason === 'vote' ? 
-                        `${data.playerName} 被投票处决` :
-                        `${data.playerName} 被猎人带走`;
-                    addMessage(deathMsg);
+                case 'night_death':
+                    if (data.message === '昨晚平安无事') {
+                        addSystemMessage(data.message);
+                    } else if (data.saved) {
+                        addSaveMessage(data.message);
+                    } else {
+                        addDeathMessage(data.message);
+                    }
                     
-                    if (data.playerId === gameState.currentPlayerId) {
+                    if (data.playerId === gameState.currentPlayerId && !data.saved) {
                         gameState.isAlive = false;
-                        addMessage('你已死亡，无法继续参与游戏');
+                        addSystemMessage('你已死亡，无法继续参与游戏');
                         elements.playerActions.innerHTML = '';
                         
                         // 如果是猎人，触发猎人技能
@@ -749,16 +821,16 @@
                     break;
                     
                 case 'seer_result':
-                    addMessage(`${data.playerName} 是 ${getRoleName(data.role)}`);
+                    addSystemMessage(`${data.playerName} 是 ${getRoleName(data.role)}`);
                     break;
                     
                 case 'game_over':
-                    addMessage(`游戏结束，${data.winner === 'werewolves' ? '狼人' : '村民'}阵营获胜！`);
+                    addSystemMessage(`游戏结束，${data.winner === 'werewolves' ? '狼人' : '好人'}阵营获胜！`);
                     elements.playerActions.innerHTML = '';
                     break;
                     
                 case 'game_already_started':
-                    addMessage('游戏已经开始，无法加入');
+                    addSystemMessage('游戏已经开始，无法加入');
                     break;
             }
         }
@@ -857,15 +929,24 @@
                 gameState.werewolfVotes = {};
             }
             
-            gameState.werewolfVotes[werewolfId] = data.targetId;
+            gameState.werewolfVotes[werewolfId] = data.targetId || null;
             
             const werewolves = Object.keys(gameState.players)
                 .filter(id => gameState.players[id].role === 'werewolf' && gameState.players[id].alive);
             
             if (Object.keys(gameState.werewolfVotes).length === werewolves.length) {
+                const validVotes = Object.values(gameState.werewolfVotes).filter(id => id !== null);
+                
+                if (validVotes.length === 0) {
+                    addSystemMessage('所有狼人选择弃权，今晚无人死亡');
+                    delete gameState.werewolfVotes;
+                    setTimeout(startSeerCheck, 3000);
+                    return;
+                }
+                
                 // 统计投票结果
                 const voteCounts = {};
-                Object.values(gameState.werewolfVotes).forEach(id => {
+                validVotes.forEach(id => {
                     voteCounts[id] = (voteCounts[id] || 0) + 1;
                 });
                 
@@ -882,7 +963,6 @@
                 
                 // 记录被杀玩家，等待女巫行动
                 if (killedPlayerId) {
-                    gameState.witchKilledPlayerId = killedPlayerId;
                     gameState.lastNightDeath = {
                         id: killedPlayerId,
                         name: gameState.players[killedPlayerId].name,
@@ -914,12 +994,12 @@
 
         // 处理女巫解药
         function handleWitchAntidote(data, witchId) {
-            if (data.save && gameState.witchKilledPlayerId) {
+            if (data.save && gameState.lastNightDeath) {
                 // 救活被狼人杀的玩家
                 gameState.lastNightDeath.saved = true;
                 gameState.witch.antidoteAvailable = false;
                 
-                addMessage(`${gameState.players[witchId].name} 使用解药救活了 ${gameState.lastNightDeath.name}`);
+                addSystemMessage(`${gameState.players[witchId].name} 使用解药救活了 ${gameState.lastNightDeath.name}`);
             }
             
             // 进入白天阶段
@@ -933,7 +1013,7 @@
             gameState.witch.poisonAvailable = false;
             
             // 记录毒杀结果
-            addMessage(`${gameState.players[witchId].name} 使用毒药杀死了 ${poisonedPlayer.name}`);
+            addSystemMessage(`${gameState.players[witchId].name} 使用毒药杀死了 ${poisonedPlayer.name}`);
             
             // 通知所有玩家
             broadcastMessage({
@@ -1030,7 +1110,7 @@
         // 处理玩家断开连接
         function handlePlayerDisconnect(playerId) {
             if (gameState.players[playerId]) {
-                addMessage(`${gameState.players[playerId].name} 离开了游戏`);
+                addSystemMessage(`${gameState.players[playerId].name} 离开了游戏`);
                 delete gameState.players[playerId];
                 delete gameState.connections[playerId];
                 updatePlayersList();
@@ -1051,9 +1131,28 @@
             }
         }
 
-        // 添加消息到消息框
-        function addMessage(message) {
+        // 添加系统消息
+        function addSystemMessage(message) {
             const messageElement = document.createElement('div');
+            messageElement.className = 'message system-message';
+            messageElement.textContent = message;
+            elements.messages.appendChild(messageElement);
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+
+        // 添加死亡消息
+        function addDeathMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message death-message';
+            messageElement.textContent = message;
+            elements.messages.appendChild(messageElement);
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+
+        // 添加救人消息
+        function addSaveMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message save-message';
             messageElement.textContent = message;
             elements.messages.appendChild(messageElement);
             elements.messages.scrollTop = elements.messages.scrollHeight;
