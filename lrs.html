@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerJS狼人杀</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: none;
+        }
+        #game-area {
+            margin-top: 20px;
+            border-top: 1px solid #ccc;
+            padding-top: 20px;
+        }
+        #players-list, #roles-list, #role-assignment {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #eee;
+            min-height: 100px;
+        }
+        .role-btn {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+        .active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #messages {
+            height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #role-assignment select {
+            padding: 5px;
+            margin-left: 10px;
+        }
+        #role-assignment div {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="host-setup">
+        <h2>创建游戏</h2>
+        <button id="create-game">创建新游戏</button>
+    </div>
+    
+    <div id="join-game">
+        <h2>加入游戏</h2>
+        <input type="text" id="game-id" placeholder="输入游戏ID">
+        <input type="text" id="player-name" placeholder="你的昵称">
+        <button id="join-button">加入游戏</button>
+    </div>
+    
+    <div id="host-controls" class="container">
+        <h2>主机控制面板</h2>
+        <p>游戏ID: <span id="host-game-id"></span></p>
+        
+        <div>
+            <h3>玩家列表</h3>
+            <div id="players-list"></div>
+        </div>
+        
+        <div>
+            <h3>角色分配</h3>
+            <div id="role-assignment"></div>
+        </div>
+        
+        <button id="start-game" disabled>开始游戏</button>
+    </div>
+    
+    <div id="player-view" class="container">
+        <h2>玩家面板</h2>
+        <p>游戏ID: <span id="player-game-id"></span></p>
+        <p>你的昵称: <span id="display-name"></span></p>
+        <div id="waiting-message">等待主机开始游戏...</div>
+    </div>
+    
+    <div id="game-area" class="container">
+        <h2>游戏进行中</h2>
+        <div id="messages"></div>
+        <div id="player-actions"></div>
+    </div>
+    
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script>
+        // 游戏状态
+        const gameState = {
+            isHost: false,
+            gameId: null,
+            peer: null,
+            connections: {},
+            players: {},
+            gameStarted: false,
+            currentPlayerId: null,
+            playerName: null,
+            playerRole: null
+        };
+
+        // DOM元素
+        const elements = {
+            hostSetup: document.getElementById('host-setup'),
+            joinGame: document.getElementById('join-game'),
+            hostControls: document.getElementById('host-controls'),
+            playerView: document.getElementById('player-view'),
+            gameArea: document.getElementById('game-area'),
+            gameIdInput: document.getElementById('game-id'),
+            playerNameInput: document.getElementById('player-name'),
+            hostGameId: document.getElementById('host-game-id'),
+            playerGameId: document.getElementById('player-game-id'),
+            displayName: document.getElementById('display-name'),
+            playersList: document.getElementById('players-list'),
+            roleAssignment: document.getElementById('role-assignment'),
+            messages: document.getElementById('messages'),
+            playerActions: document.getElementById('player-actions')
+        };
+
+        // 事件监听
+        document.getElementById('create-game').addEventListener('click', createGame);
+        document.getElementById('join-button').addEventListener('click', joinGame);
+        document.getElementById('start-game').addEventListener('click', startGame);
+
+        // 创建游戏
+        function createGame() {
+            gameState.isHost = true;
+            gameState.peer = new Peer();
+            
+            gameState.peer.on('open', (id) => {
+                gameState.gameId = id;
+                elements.hostGameId.textContent = id;
+                elements.hostSetup.style.display = 'none';
+                elements.joinGame.style.display = 'none';
+                elements.hostControls.style.display = 'block';
+                
+                addMessage(`游戏已创建，ID: ${id}`);
+            });
+            
+            gameState.peer.on('connection', (conn) => {
+                if (gameState.gameStarted) {
+                    conn.send({ type: 'game_already_started' });
+                    conn.close();
+                    return;
+                }
+                
+                conn.on('open', () => {
+                    const playerId = conn.peer;
+                    gameState.connections[playerId] = conn;
+                    
+                    conn.on('data', (data) => handleHostMessage(data, conn));
+                    conn.on('close', () => handlePlayerDisconnect(playerId));
+                });
+            });
+            
+            gameState.peer.on('error', (err) => {
+                addMessage(`错误: ${err.type} - ${err.message}`);
+            });
+        }
+
+        // 加入游戏
+        function joinGame() {
+            const gameId = elements.gameIdInput.value.trim();
+            const playerName = elements.playerNameInput.value.trim();
+            
+            if (!gameId || !playerName) {
+                alert('请输入游戏ID和你的昵称');
+                return;
+            }
+            
+            gameState.playerName = playerName;
+            gameState.peer = new Peer();
+            
+            gameState.peer.on('open', (id) => {
+                gameState.currentPlayerId = id;
+                const conn = gameState.peer.connect(gameId);
+                
+                conn.on('open', () => {
+                    gameState.gameId = gameId;
+                    elements.playerGameId.textContent = gameId;
+                    elements.displayName.textContent = playerName;
+                    elements.hostSetup.style.display = 'none';
+                    elements.joinGame.style.display = 'none';
+                    elements.playerView.style.display = 'block';
+                    
+                    // 发送加入请求
+                    conn.send({
+                        type: 'join',
+                        playerId: id,
+                        name: playerName
+                    });
+                });
+                
+                conn.on('data', (data) => handlePlayerMessage(data));
+                conn.on('close', () => addMessage('与主机的连接已断开'));
+                
+                gameState.connections.host = conn;
+            });
+            
+            gameState.peer.on('error', (err) => {
+                addMessage(`错误: ${err.type} - ${err.message}`);
+            });
+        }
+
+        // 开始游戏
+        function startGame() {
+            // 检查所有玩家是否都已分配角色
+            const allRolesAssigned = Object.values(gameState.players).every(player => player.role);
+            if (!allRolesAssigned) {
+                alert('请为所有玩家分配角色');
+                return;
+            }
+            
+            // 检查至少有一个狼人和一个村民
+            const players = Object.values(gameState.players);
+            const hasWerewolf = players.some(p => p.role === 'werewolf');
+            const hasVillager = players.some(p => p.role === 'villager');
+            
+            if (!hasWerewolf || !hasVillager) {
+                alert('至少需要1个狼人和1个村民');
+                return;
+            }
+            
+            gameState.gameStarted = true;
+            
+            // 发送角色信息给玩家
+            Object.entries(gameState.players).forEach(([playerId, player]) => {
+                gameState.connections[playerId].send({
+                    type: 'role_assignment',
+                    role: player.role
+                });
+            });
+            
+            // 更新界面
+            updateRoleAssignment();
+            document.getElementById('start-game').disabled = true;
+            
+            // 开始游戏流程
+            startNightPhase();
+        }
+
+        // 开始夜晚阶段
+        function startNightPhase() {
+            addMessage('夜幕降临，所有人请闭眼');
+            
+            if (gameState.isHost) {
+                // 通知所有玩家进入夜晚
+                broadcastMessage({ type: 'night_start' });
+                
+                // 找出所有狼人
+                const werewolves = Object.entries(gameState.players)
+                    .filter(([_, player]) => player.role === 'werewolf' && player.alive)
+                    .map(([id, _]) => id);
+                
+                if (werewolves.length > 0) {
+                    // 通知狼人互相认识
+                    werewolves.forEach(werewolfId => {
+                        gameState.connections[werewolfId].send({
+                            type: 'werewolf_info',
+                            werewolves: werewolves.filter(id => id !== werewolfId).map(id => gameState.players[id].name)
+                        });
+                    });
+                    
+                    // 设置狼人投票
+                    setTimeout(() => {
+                        startWerewolfVote(werewolves);
+                    }, 3000);
+                } else {
+                    addMessage('没有存活的狼人，直接进入白天');
+                    setTimeout(startDayPhase, 3000);
+                }
+            }
+        }
+
+        // 狼人投票
+        function startWerewolfVote(werewolves) {
+            addMessage('狼人请选择要杀死的玩家');
+            
+            if (gameState.isHost) {
+                const alivePlayers = Object.entries(gameState.players)
+                    .filter(([_, player]) => player.alive)
+                    .map(([id, player]) => ({ id, name: player.name }));
+                
+                // 通知狼人投票
+                werewolves.forEach(werewolfId => {
+                    gameState.connections[werewolfId].send({
+                        type: 'werewolf_vote',
+                        players: alivePlayers
+                    });
+                });
+            }
+        }
+
+        // 开始白天阶段
+        function startDayPhase() {
+            addMessage('天亮了，所有人请睁眼');
+            
+            if (gameState.isHost) {
+                broadcastMessage({ type: 'day_start' });
+                
+                // 检查游戏是否结束
+                if (checkGameEnd()) {
+                    return;
+                }
+                
+                // 开始白天讨论和投票
+                setTimeout(() => {
+                    startDayVote();
+                }, 3000);
+            }
+        }
+
+        // 白天投票
+        function startDayVote() {
+            addMessage('请讨论并投票处决一名玩家');
+            
+            if (gameState.isHost) {
+                const alivePlayers = Object.entries(gameState.players)
+                    .filter(([_, player]) => player.alive)
+                    .map(([id, player]) => ({ id, name: player.name }));
+                
+                // 通知所有玩家投票
+                broadcastMessage({
+                    type: 'day_vote',
+                    players: alivePlayers
+                });
+            }
+        }
+
+        // 检查游戏是否结束
+        function checkGameEnd() {
+            const werewolves = Object.values(gameState.players).filter(p => p.role === 'werewolf' && p.alive).length;
+            const villagers = Object.values(gameState.players).filter(p => p.role !== 'werewolf' && p.alive).length;
+            
+            if (werewolves === 0) {
+                addMessage('村民阵营获胜！');
+                broadcastMessage({ type: 'game_over', winner: 'villagers' });
+                return true;
+            } else if (werewolves >= villagers) {
+                addMessage('狼人阵营获胜！');
+                broadcastMessage({ type: 'game_over', winner: 'werewolves' });
+                return true;
+            }
+            
+            return false;
+        }
+
+        // 更新角色分配界面
+        function updateRoleAssignment() {
+            const roleAssignmentDiv = document.getElementById('role-assignment');
+            roleAssignmentDiv.innerHTML = '';
+            
+            Object.entries(gameState.players).forEach(([playerId, player]) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.style.margin = '10px 0';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = `${player.name}: `;
+                playerDiv.appendChild(nameSpan);
+                
+                // 如果游戏已开始，显示固定角色
+                if (gameState.gameStarted) {
+                    const roleSpan = document.createElement('span');
+                    roleSpan.textContent = getRoleName(player.role);
+                    playerDiv.appendChild(roleSpan);
+                } 
+                // 如果游戏未开始，显示角色选择下拉框
+                else {
+                    const select = document.createElement('select');
+                    select.dataset.playerId = playerId;
+                    
+                    // 添加默认空选项
+                    const emptyOption = document.createElement('option');
+                    emptyOption.value = '';
+                    emptyOption.textContent = '未分配';
+                    select.appendChild(emptyOption);
+                    
+                    // 添加可用角色选项
+                    const availableRoles = ['werewolf', 'villager', 'seer', 'witch', 'hunter', 'idiot'];
+                    availableRoles.forEach(role => {
+                        const option = document.createElement('option');
+                        option.value = role;
+                        option.textContent = getRoleName(role);
+                        option.selected = player.role === role;
+                        select.appendChild(option);
+                    });
+                    
+                    select.addEventListener('change', (e) => {
+                        const selectedRole = e.target.value;
+                        gameState.players[playerId].role = selectedRole || null;
+                        checkStartGameConditions();
+                    });
+                    
+                    playerDiv.appendChild(select);
+                }
+                
+                roleAssignmentDiv.appendChild(playerDiv);
+            });
+        }
+
+        // 更新玩家列表显示
+        function updatePlayersList() {
+            elements.playersList.innerHTML = Object.entries(gameState.players)
+                .map(([id, player]) => {
+                    const roleInfo = gameState.gameStarted && gameState.isHost ? 
+                        ` (${getRoleName(player.role)})` : '';
+                    return `${player.name}${roleInfo}`;
+                })
+                .join('<br>');
+        }
+
+        // 检查是否可以开始游戏
+        function checkStartGameConditions() {
+            const players = Object.values(gameState.players);
+            const allRolesAssigned = players.every(player => player.role);
+            const hasWerewolf = players.some(p => p.role === 'werewolf');
+            const hasVillager = players.some(p => p.role === 'villager');
+            
+            document.getElementById('start-game').disabled = 
+                !allRolesAssigned || !hasWerewolf || !hasVillager;
+        }
+
+        // 处理主机收到的消息
+        function handleHostMessage(data, conn) {
+            switch (data.type) {
+                case 'join':
+                    if (gameState.gameStarted) {
+                        conn.send({ type: 'game_already_started' });
+                        conn.close();
+                        return;
+                    }
+                    
+                    gameState.players[data.playerId] = {
+                        name: data.name,
+                        alive: true,
+                        role: null
+                    };
+                    
+                    updatePlayersList();
+                    updateRoleAssignment();
+                    addMessage(`${data.name} 加入了游戏`);
+                    checkStartGameConditions();
+                    break;
+                    
+                case 'werewolf_vote':
+                    handleWerewolfVote(data, conn.peer);
+                    break;
+                    
+                case 'day_vote':
+                    handleDayVote(data, conn.peer);
+                    break;
+            }
+        }
+
+        // 处理玩家收到的消息
+        function handlePlayerMessage(data) {
+            switch (data.type) {
+                case 'role_assignment':
+                    gameState.playerRole = data.role;
+                    elements.playerView.style.display = 'none';
+                    elements.gameArea.style.display = 'block';
+                    addMessage(`你的角色是: ${getRoleName(data.role)}`);
+                    break;
+                    
+                case 'werewolf_info':
+                    addMessage(`其他狼人是: ${data.werewolves.join(', ')}`);
+                    break;
+                    
+                case 'werewolf_vote':
+                    showVoteOptions(data.players, 'werewolf_vote');
+                    break;
+                    
+                case 'night_start':
+                    addMessage('夜幕降临，请闭眼');
+                    break;
+                    
+                case 'day_start':
+                    addMessage('天亮了，请睁眼');
+                    break;
+                    
+                case 'day_vote':
+                    showVoteOptions(data.players, 'day_vote');
+                    break;
+                    
+                case 'player_killed':
+                    addMessage(`${data.playerName} 被${data.reason === 'werewolf' ? '狼人杀死' : '投票处决'}`);
+                    if (data.playerId === gameState.currentPlayerId) {
+                        addMessage('你已死亡，无法继续参与游戏');
+                        elements.playerActions.innerHTML = '';
+                    }
+                    break;
+                    
+                case 'game_over':
+                    addMessage(`游戏结束，${data.winner === 'werewolves' ? '狼人' : '村民'}阵营获胜！`);
+                    elements.playerActions.innerHTML = '';
+                    break;
+                    
+                case 'game_already_started':
+                    addMessage('游戏已经开始，无法加入');
+                    break;
+            }
+        }
+
+        // 显示投票选项
+        function showVoteOptions(players, voteType) {
+            elements.playerActions.innerHTML = '';
+            
+            const title = document.createElement('h3');
+            title.textContent = voteType === 'werewolf_vote' ? '选择要杀死的玩家' : '投票处决一名玩家';
+            elements.playerActions.appendChild(title);
+            
+            players.forEach(player => {
+                if (player.id === gameState.currentPlayerId) return;
+                
+                const btn = document.createElement('button');
+                btn.textContent = player.name;
+                btn.onclick = () => {
+                    gameState.connections.host.send({
+                        type: voteType,
+                        targetId: player.id
+                    });
+                    elements.playerActions.innerHTML = '已投票，等待结果...';
+                };
+                elements.playerActions.appendChild(btn);
+            });
+        }
+
+        // 处理狼人投票
+        function handleWerewolfVote(data, werewolfId) {
+            if (!gameState.werewolfVotes) {
+                gameState.werewolfVotes = {};
+            }
+            
+            gameState.werewolfVotes[werewolfId] = data.targetId;
+            
+            const werewolves = Object.keys(gameState.players)
+                .filter(id => gameState.players[id].role === 'werewolf' && gameState.players[id].alive);
+            
+            if (Object.keys(gameState.werewolfVotes).length === werewolves.length) {
+                // 统计投票结果
+                const voteCounts = {};
+                Object.values(gameState.werewolfVotes).forEach(id => {
+                    voteCounts[id] = (voteCounts[id] || 0) + 1;
+                });
+                
+                // 找出得票最多的玩家
+                let maxVotes = 0;
+                let killedPlayerId = null;
+                
+                Object.entries(voteCounts).forEach(([id, count]) => {
+                    if (count > maxVotes) {
+                        maxVotes = count;
+                        killedPlayerId = id;
+                    }
+                });
+                
+                // 杀死玩家
+                if (killedPlayerId) {
+                    gameState.players[killedPlayerId].alive = false;
+                    addMessage(`${gameState.players[killedPlayerId].name} 被狼人杀死`);
+                    
+                    // 通知所有玩家
+                    broadcastMessage({
+                        type: 'player_killed',
+                        playerId: killedPlayerId,
+                        playerName: gameState.players[killedPlayerId].name,
+                        reason: 'werewolf'
+                    });
+                }
+                
+                delete gameState.werewolfVotes;
+                
+                // 进入白天
+                setTimeout(startDayPhase, 3000);
+            }
+        }
+
+        // 处理白天投票
+        function handleDayVote(data, voterId) {
+            if (!gameState.dayVotes) {
+                gameState.dayVotes = {};
+            }
+            
+            gameState.dayVotes[voterId] = data.targetId;
+            
+            const alivePlayers = Object.keys(gameState.players)
+                .filter(id => gameState.players[id].alive);
+            
+            if (Object.keys(gameState.dayVotes).length === alivePlayers.length) {
+                // 统计投票结果
+                const voteCounts = {};
+                Object.values(gameState.dayVotes).forEach(id => {
+                    voteCounts[id] = (voteCounts[id] || 0) + 1;
+                });
+                
+                // 找出得票最多的玩家
+                let maxVotes = 0;
+                let executedPlayerId = null;
+                
+                Object.entries(voteCounts).forEach(([id, count]) => {
+                    if (count > maxVotes) {
+                        maxVotes = count;
+                        executedPlayerId = id;
+                    }
+                });
+                
+                // 处决玩家
+                if (executedPlayerId) {
+                    gameState.players[executedPlayerId].alive = false;
+                    addMessage(`${gameState.players[executedPlayerId].name} 被投票处决`);
+                    
+                    // 通知所有玩家
+                    broadcastMessage({
+                        type: 'player_killed',
+                        playerId: executedPlayerId,
+                        playerName: gameState.players[executedPlayerId].name,
+                        reason: 'vote'
+                    });
+                }
+                
+                delete gameState.dayVotes;
+                
+                // 检查游戏是否结束
+                if (!checkGameEnd()) {
+                    // 进入夜晚
+                    setTimeout(startNightPhase, 3000);
+                }
+            }
+        }
+
+        // 处理玩家断开连接
+        function handlePlayerDisconnect(playerId) {
+            if (gameState.players[playerId]) {
+                addMessage(`${gameState.players[playerId].name} 离开了游戏`);
+                delete gameState.players[playerId];
+                delete gameState.connections[playerId];
+                updatePlayersList();
+                updateRoleAssignment();
+                checkStartGameConditions();
+            }
+        }
+
+        // 广播消息给所有玩家
+        function broadcastMessage(message) {
+            Object.values(gameState.connections).forEach(conn => {
+                conn.send(message);
+            });
+        }
+
+        // 添加消息到消息框
+        function addMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            elements.messages.appendChild(messageElement);
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+
+        // 获取角色名称
+        function getRoleName(role) {
+            const roleNames = {
+                werewolf: '狼人',
+                villager: '村民',
+                seer: '预言家',
+                witch: '女巫',
+                hunter: '猎人',
+                idiot: '白痴'
+            };
+            return roleNames[role] || role;
+        }
+    </script>
+</body>
+</html>
